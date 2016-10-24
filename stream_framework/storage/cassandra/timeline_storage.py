@@ -85,7 +85,7 @@ class CassandraTimelineStorage(BaseTimelineStorage):
             serializer_class, **options)
         self.model = self.get_model(self.base_model, self.column_family_name)
 
-    def add_to_storage(self, key, activities, batch_interface=None):
+    def add_to_storage(self, key, activities, batch_interface=None, *args, **kwargs):
         batch = batch_interface or self.get_batch_interface()
         for model_instance in activities.values():
             model_instance.feed_id = str(key)
@@ -120,7 +120,10 @@ class CassandraTimelineStorage(BaseTimelineStorage):
         parameters = (
             trim_col, self.model._get_keyspace(), self.column_family_name, key, length + 1)
         results = execute(query % parameters)
-        if len(results) < length:
+        
+        # compatibility with both cassandra driver 2.7 and 3.0
+        results_length = len(results.current_rows) if hasattr(results, 'current_rows') else len(results)
+        if results_length < length:
             return
         trim_ts = (results[-1]['wt'] + results[-2]['wt']) // 2
         delete_query = "DELETE FROM %s.%s USING TIMESTAMP %s WHERE feed_id='%s';"
@@ -167,7 +170,7 @@ class CassandraTimelineStorage(BaseTimelineStorage):
     def index_of(self, key, activity_id):
         if not self.contains(key, activity_id):
             raise ValueError
-        return len(self.model.objects.filter(feed_id=key, activity_id__gt=activity_id).values_list('feed_id'))
+        return self.model.objects.filter(feed_id=key, activity_id__gt=activity_id).count()
 
     def get_ordering_or_default(self, ordering_args):
         if ordering_args is None:
@@ -179,6 +182,15 @@ class CassandraTimelineStorage(BaseTimelineStorage):
     def get_nth_item(self, key, index, ordering_args=None):
         ordering = self.get_ordering_or_default(ordering_args)
         return self.model.objects.filter(feed_id=key).order_by(*ordering).limit(index + 1)[index]
+
+    def get_columns_to_read(self, query):
+        columns = self.model._columns.keys()
+        deferred_fields = getattr(query, '_defer_fields', [])
+        setattr(query, '_defer_fields', [])
+        columns = [c for c in columns if c not in deferred_fields]
+        # Explicitly set feed_id as column because it is deferred in new
+        # versions of the cassandra driver.
+        return list(set(columns + ['feed_id']))
 
     def get_slice_from_storage(self, key, start, stop, filter_kwargs=None, ordering_args=None):
         '''
@@ -204,6 +216,8 @@ class CassandraTimelineStorage(BaseTimelineStorage):
         if stop is not None:
             limit = (stop - (start or 0))
 
-        for activity in query.order_by(*ordering).limit(limit):
-            results.append([activity.activity_id, activity])
+        cols = self.get_columns_to_read(query)
+        for values in query.values_list(*cols).order_by(*ordering).limit(limit):
+            activity = dict(zip(cols, values))
+            results.append([activity['activity_id'], activity])
         return results

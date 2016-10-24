@@ -4,6 +4,11 @@ import pickle
 
 
 class CassandraAggregatedActivitySerializer(AggregatedActivitySerializer):
+    '''
+    Cassandra serializer for aggregated activities. Note: unlike other serializers this serializer
+    does not have symmetrical `dumps` and `loads` functions (eg. loads reads a dictionary
+    and dumps returns a CQLEngine model instance)
+    '''
 
     def __init__(self, model, *args, **kwargs):
         AggregatedActivitySerializer.__init__(self, *args, **kwargs)
@@ -21,11 +26,11 @@ class CassandraAggregatedActivitySerializer(AggregatedActivitySerializer):
         return model_instance
 
     def loads(self, serialized_aggregated):
-        activities = pickle.loads(serialized_aggregated.activities)
+        activities = pickle.loads(serialized_aggregated['activities'])
         aggregated = self.aggregated_activity_class(
-            group=serialized_aggregated.group,
+            group=serialized_aggregated['group'],
             activities=activities,
-            created_at=serialized_aggregated.created_at,
-            updated_at=serialized_aggregated.updated_at,
+            created_at=serialized_aggregated['created_at'],
+            updated_at=serialized_aggregated['updated_at'],
         )
         return aggregated

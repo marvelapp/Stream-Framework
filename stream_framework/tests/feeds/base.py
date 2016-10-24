@@ -48,35 +48,32 @@ class TestBaseFeed(unittest.TestCase):
         with patch.object(self.test_feed.timeline_storage, 'add_many') as add_many:
             with patch.object(self.test_feed.timeline_storage, 'trim') as trim:
                 self.test_feed.add(self.activity)
-                add_many.assertCalled()
-                trim.assertCalled()
+                self.assertTrue(add_many.called)
 
     def test_delegate_count_to_storage(self):
         with patch.object(self.test_feed.timeline_storage, 'count') as count:
             self.test_feed.count()
-            count.assertCalled()
             count.assert_called_with(self.test_feed.key)
 
     def test_delegate_delete_to_storage(self):
         with patch.object(self.test_feed.timeline_storage, 'delete') as delete:
             self.test_feed.delete()
-            delete.assertCalled()
             delete.assert_called_with(self.test_feed.key)
 
     def test_delegate_remove_many_to_storage(self):
         with patch.object(self.test_feed.timeline_storage, 'remove_many') as remove_many:
             self.test_feed.remove(self.activity.serialization_id)
-            remove_many.assertCalled()
+            self.assertTrue(remove_many.called)
 
     def test_delegate_add_to_add_many(self):
         with patch.object(self.test_feed, 'add_many') as add_many:
             self.test_feed.add(self.activity.serialization_id)
-            add_many.assertCalled()
+            self.assertTrue(add_many.called)
 
     def test_delegate_remove_to_remove_many(self):
         with patch.object(self.test_feed, 'remove_many') as remove_many:
             self.test_feed.remove(self.activity.serialization_id)
-            remove_many.assertCalled()
+            self.assertTrue(remove_many.called)
 
     def test_slicing_left(self):
         with patch.object(self.test_feed, 'get_activity_slice') as get_activity_slice:
@@ -181,6 +178,9 @@ class TestBaseFeed(unittest.TestCase):
             activity = self.activity_class(
                 i, LoveVerb, i, i, datetime.datetime.now(), {})
             activities.append(activity)
+            # needed to make sure all activities have a different timestamp
+            # otherwise trim might delete more than we want
+            time.sleep(0.01)
             self.test_feed.add_many([activity])
 
         self.test_feed.insert_activities(activities)
@@ -214,15 +214,16 @@ class TestBaseFeed(unittest.TestCase):
     def test_feed_indexof_large(self):
         assert self.test_feed.count() == 0
         activity_dict = {}
+        now = datetime.datetime.now()
         for i in range(150):
-            moment = datetime.datetime.now() - datetime.timedelta(seconds=i)
+            moment = now - datetime.timedelta(seconds=i)
             activity = self.activity_class(i, LoveVerb, i, i, time=moment)
             activity_dict[i] = activity
         self.test_feed.insert_activities(activity_dict.values())
-        self.test_feed.add_many(activity_dict.values())
+        self.test_feed.add_many(activity_dict.values(), trim=False)
 
         # give cassandra a moment
-        time.sleep(0.1)
+        time.sleep(1)
 
         activity = activity_dict[110]
         index_of = self.test_feed.index_of(activity.serialization_id)
