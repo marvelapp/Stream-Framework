@@ -7,7 +7,6 @@ Stream Framework
 
 ## Activity Streams & Newsfeeds ##
 
-
 <p align="center">
   <img src="https://dvqg2dogggmn6.cloudfront.net/images/mood-home.png" alt="Examples of what you can build" title="What you can build"/>
 </p>
@@ -283,7 +282,6 @@ def feed(request):
 
 This example only briefly covered how Stream Framework works.
 The full explanation can be found on read the docs.
-
 
 ## Features ##
 
